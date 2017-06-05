@@ -3,59 +3,33 @@
 #include <string>
 #include <thread>
 #include <process.h>
+#include <vector>
+#include <iostream>
+
+#include "messages .h"
+
 #pragma comment(lib,"ws2_32.lib")
 
 SOCKET sock; // this is the server socket
 SOCKADDR_IN i_sock; // this will containt some informations about our server socket
 WSADATA Data; // this is to save our socket version
-Node* neighbours;
+std::vector<Node> neighbours;
 int nrNeighbours = 0;
-int kids = 0;
+int nrKids = 0;
+Node kids[2];
 Node me;
 bool first = false;
 std::string id;
-socketStruct whoToCall;
+//socketStruct whoToCall;
 Node myZero;
 
 void SendThing(void* argv);
 
 
 
-struct AcceptPacket
-{
-	std::string command;
-	socketStruct whereTo;
-	socketStruct me;
-};
 
-typedef struct
-{
-	std::string id;
-	//SOCKADDR_IN address;
-	//SOCKET socket;
 
-}Node;
-struct MyPacket
-{
-	std::string command;
-	std::string id;
-	SOCKADDR_IN address;
-	SOCKET socket;
 
-};
-typedef struct {
-	SOCKADDR_IN address;
-	SOCKET socket;
-}socketStruct;
-/*
-int amIFree()
-{
-	int k;
-	if (kids == 2) return "NO";
-	for(int i = 0; i < nuberofnei)
-	return 0;
-}
-*/
 int Send(SOCKET sockToSend,char *Buf, int len)
 {
 	int slen;
@@ -86,7 +60,7 @@ int EndSocket(SOCKET sock)
 	WSACleanup();
 	return 1;
 }
-SOCKET ConnectToServent(SOCKADDR_IN adr)
+SOCKET ConnectToServent(SOCKADDR_IN* adr)
 {
 	WSADATA Data;
 	WSAStartup(MAKEWORD(2, 2), &Data);
@@ -98,8 +72,8 @@ SOCKET ConnectToServent(SOCKADDR_IN adr)
 	}
 	SOCKADDR_IN i_sockOUT;
 	i_sockOUT.sin_family = AF_INET;
-	i_sockOUT.sin_addr.s_addr = adr.sin_addr.s_addr;
-	i_sockOUT.sin_port = adr.sin_port;
+	i_sockOUT.sin_addr.s_addr = adr->sin_addr.s_addr;
+	i_sockOUT.sin_port = adr->sin_port;
 	int ss = connect(sockOUT, (struct sockaddr *)&i_sockOUT, sizeof(i_sockOUT));
 	if (ss != 0)
 	{
@@ -115,12 +89,12 @@ SOCKET ConnectToServent(SOCKADDR_IN adr)
 
 void GOTOfunc(void* argv)
 {
-	socketStruct* whereTo = (socketStruct*)argv;
+	SOCKADDR_IN* whereTo = (SOCKADDR_IN*)argv;
 	MyPacket toSend;
 	//toSend.address = myZero.address;
 	//toSend.socket = myZero.socket;
 	toSend.command = "ZERO";
-	SOCKET buddySock = ConnectToServent(whereTo->address);
+	SOCKET buddySock = ConnectToServent(whereTo);
 	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
 	EndSocket(buddySock);
 	delete(whereTo);
@@ -144,21 +118,20 @@ int BSConnect(char *IP, int Port)
 		printf("Cannot connect");
 		return 0;
 	}
-	AcceptPacket mp;
-	Recive((char*)&mp, sizeof(MyPacket));
+	BSPacket mp;
+	Recive((char*)&mp, sizeof(BSPacket));
 
 	//dal je goto ili first
 	if (mp.command.compare("GOTO"))
 	{
-		socketStruct* whereTo = new socketStruct();
-		whereTo->address = mp.whereTo.address;
-		whereTo->socket = mp.whereTo.socket;
+		SOCKADDR_IN* whereTo = new SOCKADDR_IN();
+		whereTo = &mp.whereTo;
 
 
 		i_sock.sin_family = AF_INET;
 		i_sock.sin_addr.s_addr = htonl(INADDR_ANY);
-		i_sock.sin_port = htons(mp.me.address.sin_port);
-		bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
+		i_sock.sin_port = htons(mp.me.sin_port);
+		//bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
 		
 
 		_beginthread(GOTOfunc, NULL, (void*)whereTo);
@@ -171,8 +144,8 @@ int BSConnect(char *IP, int Port)
 
 		i_sock.sin_family = AF_INET;
 		i_sock.sin_addr.s_addr = htonl(INADDR_ANY);
-		i_sock.sin_port = htons(mp.me.address.sin_port);
-		bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
+		i_sock.sin_port = htons(mp.me.sin_port);
+		//bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
 
 	}
 	/*
@@ -181,68 +154,168 @@ int BSConnect(char *IP, int Port)
 		int((mp.address.sin_addr.s_addr & 0xFF0000) >> 16),
 		int((mp.address.sin_addr.s_addr & 0xFF000000) >> 24), mp.address.sin_port);
 	printf("Succefully connected");*/
+	EndSocket(sock);
 	return 1;
 }
 
 
-void ClientThing(void* argv)
-{
-	SOCKET buddySocket = (SOCKET)argv;
-	MyPacket mp;
-	Recive((char*)&mp, sizeof(MyPacket));
-	MyPacket buddy;
-	buddy.address = mp.address;
-	buddy.socket = mp.socket;
-	if (mp.command.compare("ZERO"))
-	{
-		//vrati buddyu koga da kontaktira
-		MyPacket toSend;
-		toSend.address = myZero.address;
-		toSend.socket = myZero.socket;
-		toSend.command = "";
-		Send(mp.socket,(char*)&toSend, sizeof(MyPacket));
-	}
-
-}
-
 void SendZero(void* argv)
 {
-	socketStruct* buddySocket = (socketStruct*)argv;
+	//socketStruct* buddySocket = (socketStruct*)argv;
+	SOCKADDR_IN* whereTo = (SOCKADDR_IN*)argv;
 	MyPacket toSend;
-	toSend.address = myZero.address;
-	toSend.socket = myZero.socket;
+	toSend.addressToGoTo = myZero.address;
+	toSend.myAddress = i_sock;
 	toSend.command = "MYZERO";
-	ConnectToServent(buddySocket->address);
-	Send(buddySocket->socket, (char*)&toSend, sizeof(MyPacket));
-	EndSocket(buddySocket->socket);
-	delete(buddySocket);
+	SOCKET buddySock = ConnectToServent(whereTo);
+	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
+	EndSocket(buddySock);
+	delete(whereTo);
 }
 
 void contactZero(void* argv)
 {
-	socketStruct* buddySocket = (socketStruct*)argv;
+	//SOCKADDR_IN* whereTo = (SOCKADDR_IN*)argv;
 	MyPacket toSend;
-	toSend.address = myZero.address;
-	toSend.socket = myZero.socket;
+	toSend.addressToGoTo = myZero.address;
+	toSend.myAddress = i_sock;
 	toSend.command = "ZERO";
-	SOCKET buddySock = ConnectToServent(myZero->address);
+	SOCKET buddySock = ConnectToServent(&myZero.address);
 	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
 	EndSocket(buddySock);
 
-	delete(buddySocket);
+	//delete(whereTo);
 }
 
+bool hasEnding(std::string const &fullString, std::string const &ending) {
+	if (fullString.length() >= ending.length()) {
+		return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
+	}
+	else {
+		return false;
+	}
+}
+std::string getIthDigitFromEnd(std::string text, int i)
+{
+	return text.substr(text.length()-i,text.length()-i+1);
+}
+std::string getStartID(std::string text)
+{
+	return text.substr(0, 1);
+}
+std::string getEndID(std::string text)
+{
+	return text.substr(text.length() - 1);
+}
+bool StartsWith(const std::string& text, const std::string& token)
+{
+	if (text.length() < token.length())
+		return false;
+	return (text.compare(0, token.length(), token) == 0);
+}
+
+bool amIFree()
+{
+	//if (nrKids < 2) return true;
+	int k = 0;
+	for (int i = 0; i < neighbours.size(); i++)
+	{
+		if (getEndID(id).compare("1") || getEndID(id).compare("2"))
+		{
+			k++;
+			nrKids++;
+		}
+		if (k == 2)
+			nrKids = 2;
+			return false;
+	}
+	return true;
+}
+std::string createID(std::string parentID)
+{
+
+}
+std::string findMaxNeighbourID()
+{
+	std::string max = id;
+	int maxi = atoi(id.c_str());
+	int temp = 0;
+	for (int i = 0; i < neighbours.size(); i++)
+	{
+		temp = atoi(neighbours[i].id.c_str());
+		if (temp > maxi)
+		{
+			maxi = temp;
+			max = neighbours[i].id;
+		}
+	}
+	return max;
+}
+std::string createID(std::string base,std::string end)
+{
+	return base.substr(base.length() - 1) + end;
+}
 
 void whereToGo(void* argv)
 {
-	for (int i; i < nrNeighbours; i++)
+	SOCKADDR_IN* buddySocket = (SOCKADDR_IN*)argv;
+	if (getEndID(id).compare("0"))
 	{
+		if (amIFree)
+		{
+			MyPacket toSend;
+			nrKids++;
+			Node myChild;
+			myChild.address = (SOCKADDR_IN&) buddySocket;
+			myChild.id = std::to_string(nrKids);
 
+			neighbours.push_back(myChild);
+
+			//kontaktirati buddySocket da nas doda u neighboure
+
+			
+		}
+		else
+		{
+
+			//salji neighbourima koji se zavrsavaju na 0 dal su oni free
+
+
+			MyPacket toSend;
+			toSend.addressToGoTo = myZero.address;
+			toSend.myAddress = i_sock;
+			//toSend.socket = myZero.socket;
+			toSend.command = "FREE";
+			SOCKET buddySock = ConnectToServent(&myZero.address);
+			Send(buddySock, (char*)&toSend, sizeof(MyPacket));
+			EndSocket(buddySock);
+
+			delete(buddySocket);
+		}
+	}
+	else
+	{
+		/*	std::string max = findMaxNeighbourID();
+		if (getEndID(max).compare("1"))
+		{
+		//fali nam dvojka
+		toSend.id = createID(max, "2");
+		}
+		else if (getEndID(max).compare("2"))
+		{
+		//puni smo, vrati se
+		}
+		else if (getEndID(max).compare("0"))
+		{
+		//idi na taj cvor i ponovi sve ovo
+		toSend.command = "ZERO";
+		toSend
+		}*/
 	}
 }
 void ServerThing(void* argv)
 {
-	socketStruct* buddySocket = (socketStruct*)argv;
+	SOCKADDR_IN* buddySocket = (SOCKADDR_IN*)argv;
 	MyPacket buddy;
 	Recive((char*)&buddy, sizeof(MyPacket));	
 	if (buddy.command.compare("ZERO"))
@@ -255,17 +328,17 @@ void ServerThing(void* argv)
 		}
 		else
 		{
+
 			_beginthread(whereToGo, NULL, (void*)buddySocket);
 		}
 	}
 	if (buddy.command.compare("MYZERO"))
 	{
 		myZero.id = buddy.id;
-		myZero.socket = buddy.socket;
-		myZero.address = buddy.address;
-		//socketStruct* ss = new socketStruct();
-		//buddy je 0 onog koji nam je poslao
-		_beginthread(contactZero, NULL, (void*)buddySocket);
+		myZero.address = buddy.addressToGoTo;
+		
+		_beginthread(contactZero, NULL, NULL);
+		delete(buddySocket);
 	}
 	//EndSocket(buddySocket->socket);
 }
@@ -274,6 +347,7 @@ int main()
 	//bootstrap
 	BSConnect("127.0.0.1", 9999);
 	//zatvori
+	//EndSocket(s);
 	/*WSAStartup(MAKEWORD(2, 2), &Data);
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock == INVALID_SOCKET)
@@ -282,16 +356,23 @@ int main()
 		return 1;
 	}
 	*/
+	if (sock == INVALID_SOCKET)
+	{
+		return 1;
+	}
+
+	bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
+	listen(sock, 100);
 	while (1)
 	{
 		SOCKET myBuddy;
 		SOCKADDR_IN i_sock2;
 		int so2len = sizeof(i_sock2);
 		myBuddy = accept(sock, (sockaddr *)&i_sock2, &so2len);
-		socketStruct *ss = new socketStruct();
-		ss->address = i_sock2;
-		ss->socket = myBuddy;
-		_beginthread(ServerThing, NULL, (void*)ss);
+		//socketStruct *ss = new socketStruct();
+		//ss->address = i_sock2;
+		//ss->socket = myBuddy;
+		_beginthread(ServerThing, NULL, (void*)&i_sock2);
 
 	}
 
