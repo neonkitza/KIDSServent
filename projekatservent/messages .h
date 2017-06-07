@@ -21,7 +21,9 @@ struct MyPacket
 {
 	std::string command;
 	std::string id;
-	SOCKADDR_IN addressToGoTo; //destination
-	SOCKADDR_IN myAddress; //origin (aka me)
+	int layer;
+	SOCKADDR_IN addressToGoTo; //who to send MyPacket to
+	SOCKADDR_IN addressToContact; //who should we contact once we recieve the packet
+	SOCKADDR_IN addressOfOrigin; //who sent it
 
 };

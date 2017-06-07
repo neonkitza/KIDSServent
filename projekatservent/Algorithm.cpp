@@ -6,6 +6,7 @@
 #include <vector>
 #include <iostream>
 
+#include "util.h"
 #include "messages .h"
 
 #pragma comment(lib,"ws2_32.lib")
@@ -22,12 +23,6 @@ bool first = false;
 std::string id;
 //socketStruct whoToCall;
 Node myZero;
-
-void SendThing(void* argv);
-
-
-
-
 
 
 int Send(SOCKET sockToSend,char *Buf, int len)
@@ -91,12 +86,13 @@ void GOTOfunc(void* argv)
 {
 	SOCKADDR_IN* whereTo = (SOCKADDR_IN*)argv;
 	MyPacket toSend;
-	//toSend.address = myZero.address;
-	//toSend.socket = myZero.socket;
+	
 	toSend.command = "ZERO";
-	SOCKET buddySock = ConnectToServent(whereTo);
-	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
-	EndSocket(buddySock);
+	toSend.addressToGoTo = *whereTo;
+	toSend.addressOfOrigin = i_sock;
+	toSend.addressToContact = i_sock;
+
+	SendMyThing(toSend);
 	delete(whereTo);
 }
 
@@ -140,12 +136,15 @@ int BSConnect(char *IP, int Port)
 	{
 		first = true;
 		id = "0";
-
+		me.id = id;
 
 		i_sock.sin_family = AF_INET;
 		i_sock.sin_addr.s_addr = htonl(INADDR_ANY);
 		i_sock.sin_port = htons(mp.me.sin_port);
-		//bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
+
+
+		me.address = i_sock;
+
 
 	}
 	/*
@@ -158,61 +157,15 @@ int BSConnect(char *IP, int Port)
 	return 1;
 }
 
-
-void SendZero(void* argv)
+void SendMyThing(MyPacket toSend)
 {
-	//socketStruct* buddySocket = (socketStruct*)argv;
-	SOCKADDR_IN* whereTo = (SOCKADDR_IN*)argv;
-	MyPacket toSend;
-	toSend.addressToGoTo = myZero.address;
-	toSend.myAddress = i_sock;
-	toSend.command = "MYZERO";
-	SOCKET buddySock = ConnectToServent(whereTo);
+	SOCKET buddySock = ConnectToServent(&toSend.addressToGoTo);
 	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
 	EndSocket(buddySock);
-	delete(whereTo);
+	//delete(mp); //mozda ne ovde
 }
 
-void contactZero(void* argv)
-{
-	//SOCKADDR_IN* whereTo = (SOCKADDR_IN*)argv;
-	MyPacket toSend;
-	toSend.addressToGoTo = myZero.address;
-	toSend.myAddress = i_sock;
-	toSend.command = "ZERO";
-	SOCKET buddySock = ConnectToServent(&myZero.address);
-	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
-	EndSocket(buddySock);
 
-	//delete(whereTo);
-}
-
-bool hasEnding(std::string const &fullString, std::string const &ending) {
-	if (fullString.length() >= ending.length()) {
-		return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
-	}
-	else {
-		return false;
-	}
-}
-std::string getIthDigitFromEnd(std::string text, int i)
-{
-	return text.substr(text.length()-i,text.length()-i+1);
-}
-std::string getStartID(std::string text)
-{
-	return text.substr(0, 1);
-}
-std::string getEndID(std::string text)
-{
-	return text.substr(text.length() - 1);
-}
-bool StartsWith(const std::string& text, const std::string& token)
-{
-	if (text.length() < token.length())
-		return false;
-	return (text.compare(0, token.length(), token) == 0);
-}
 
 bool amIFree()
 {
@@ -231,116 +184,295 @@ bool amIFree()
 	}
 	return true;
 }
-std::string createID(std::string parentID)
+std::string createID(int layer,char whichOne)
 {
+	std::string newID = id;
+	newID[layer] = whichOne;
+	return newID;
 
 }
-std::string findMaxNeighbourID()
+
+void broadcastMSG(MyPacket toSend)
 {
-	std::string max = id;
-	int maxi = atoi(id.c_str());
-	int temp = 0;
-	for (int i = 0; i < neighbours.size(); i++)
+	//int layer = toSend.layer;
+	for (int l = toSend.layer; l < id.size(); l++)
 	{
-		temp = atoi(neighbours[i].id.c_str());
-		if (temp > maxi)
+		for (int i = 0; i < neighbours.size(); i++)
 		{
-			maxi = temp;
-			max = neighbours[i].id;
+			if (neighbours[i].id[l] > id[l])
+			{
+				//send the msg
+				toSend.addressToGoTo = neighbours[i].address;
+				toSend.layer = l+1;
+				SendMyThing(toSend);
+			}
 		}
 	}
-	return max;
-}
-std::string createID(std::string base,std::string end)
-{
-	return base.substr(base.length() - 1) + end;
+
 }
 
-void whereToGo(void* argv)
+int findNeighbourWithMaxId(int layer)
 {
-	SOCKADDR_IN* buddySocket = (SOCKADDR_IN*)argv;
-	if (getEndID(id).compare("0"))
+	std::string max = id;
+	int temp = -1;
+	for (int l = layer; l < id.size() - 1; l++)
 	{
-		if (amIFree)
+		for (int i = 0; i < neighbours.size(); i++)
 		{
-			MyPacket toSend;
+			if (neighbours[i].id[l] > max[l] && (neighbours[i].id[neighbours[i].id.size() - 1] == '1' || neighbours[i].id[neighbours[i].id.size() - 1] == '2'))
+			{
+				temp = i;
+			}
+		}
+		if (temp != -1) break;
+	}
+	return temp;
+}
+
+void addZeroToID(MyPacket buddy)
+{
+	MyPacket toSend;
+	if (buddy.id.size() > id.size())
+		addZeroToMyID();
+	toSend.id = id;
+	toSend.layer = buddy.layer;
+	toSend.addressOfOrigin = i_sock;
+	toSend.command = "ADDZEROTOID";
+
+	broadcastMSG(toSend);
+}
+void addZeroToMyID()
+{
+	id = "0" + id;
+}
+
+
+void goBack(void* argv)
+{
+	MyPacket* buddy = (MyPacket*)argv;
+}
+
+void whereToGoFromZero(MyPacket* buddy)
+{
+	//SOCKADDR_IN* buddySocket = (SOCKADDR_IN*)argv;
+	MyPacket toSend;
+	toSend.layer = 0;
+	buddy->layer = 0;
+	if (amIFree())
+	{
+		nrKids++;
+		Node myChild;
+		myChild.address = buddy->addressToContact;
+		myChild.id = createID(0, '0' + nrKids);
+
+		neighbours.push_back(myChild);
+		kids[nrKids - 1] = myChild;
+
+		//kontaktirati buddy->addressToContact da nas doda u neighboure
+
+
+	}
+	else
+	{
+		//if(buddy->layer == 0)
+		int neighbourIndex = findNeighbourWithMaxId(toSend.layer);
+		if (neighbourIndex == -1)
+		{
+			//povecati broj cifara svih prethodnih
+			addZeroToID(*buddy);
+
+			//mora da se grana i tu mu je mesto
 			nrKids++;
 			Node myChild;
-			myChild.address = (SOCKADDR_IN&) buddySocket;
-			myChild.id = std::to_string(nrKids);
-
-			neighbours.push_back(myChild);
-
-			//kontaktirati buddySocket da nas doda u neighboure
-
+			myChild.address = buddy->addressToContact;
+			myChild.id = createID(0, '0' + nrKids);
 			
+			neighbours.push_back(myChild);
+			kids[nrKids - 1] = myChild;
 		}
 		else
 		{
 
-			//salji neighbourima koji se zavrsavaju na 0 dal su oni free
+			toSend.addressToGoTo = neighbours[neighbourIndex].address;
+			toSend.addressToContact = buddy->addressToContact;
+			toSend.addressOfOrigin = i_sock;
+			toSend.layer++;
+			toSend.id = id;
+			toSend.command = "FREE?";
 
-
-			MyPacket toSend;
-			toSend.addressToGoTo = myZero.address;
-			toSend.myAddress = i_sock;
-			//toSend.socket = myZero.socket;
-			toSend.command = "FREE";
-			SOCKET buddySock = ConnectToServent(&myZero.address);
-			Send(buddySock, (char*)&toSend, sizeof(MyPacket));
-			EndSocket(buddySock);
-
-			delete(buddySocket);
+			SendMyThing(toSend);
 		}
+
+	}
+}
+
+void FindFree(MyPacket* buddy)
+{
+	MyPacket toSend;
+	toSend.layer = buddy->layer;
+	if (amIFree())
+	{ 
+		nrKids++;
+		Node myChild;
+		myChild.address = buddy->addressToContact;
+		myChild.id = createID(buddy->layer + 1, '0'+nrKids);
+
+		neighbours.push_back(myChild);
+
+		//kontaktirati buddySocket da nas doda u neighboure
+
+
 	}
 	else
 	{
-		/*	std::string max = findMaxNeighbourID();
-		if (getEndID(max).compare("1"))
+		int neighbourIndex = findNeighbourWithMaxId(toSend.layer);
+		if (buddy->layer == id.length() - 1 || neighbourIndex == -1)
 		{
-		//fali nam dvojka
-		toSend.id = createID(max, "2");
+			toSend.layer--;
+			toSend.addressToGoTo = buddy->addressOfOrigin;
+			toSend.addressToContact = buddy->addressToContact;
+			toSend.addressOfOrigin = i_sock;
+			toSend.id = id;
+			toSend.command = "NOFREE";
+
+			SendMyThing(toSend);
+
+			//_beginthread(goBack, NULL, (void*)toSend);
+			//vracaj nazad
 		}
-		else if (getEndID(max).compare("2"))
+		else
 		{
-		//puni smo, vrati se
+
+			toSend.addressToGoTo = neighbours[neighbourIndex].address;
+			toSend.addressToContact = buddy->addressToContact;
+			toSend.addressOfOrigin = i_sock;
+			toSend.layer++;
+			toSend.id = id;
+			toSend.command = "FREE?";
+
+			SendMyThing(toSend);
+			
 		}
-		else if (getEndID(max).compare("0"))
+
+	}
+	//delete(buddy);
+}
+void NoFree(void* argv)
+{
+	MyPacket* buddy = (MyPacket*)argv;
+	MyPacket toSend;
+	if (buddy->id[buddy->layer] == '1')
+	{
+		//iz trenutnog cvora napravimo dvojku ovog layera
+		toSend.id = createID(buddy->layer, '2');
+		toSend.command = "FOUNDFREE";
+		toSend.addressToGoTo = buddy->addressToContact;
+		toSend.addressOfOrigin = i_sock;
+		
+		//kreiramo dvojku na layeru ovog cvora
+		//dodamo ga kao neighbour-a
+		Node newNode;
+		newNode.address = buddy->addressToContact;
+		newNode.id = toSend.id;
+		neighbours.push_back(newNode);
+		
+
+		//TODO: povezemo sa svima sa kojima treba
+
+
+
+	}
+	if (buddy->id[buddy->layer] == '2')
+	{
+		//vracamo se nazad sa commandom "NOFREE"
+		//toSend.command = "NOFREE";
+
+		if (buddy->layer == 0)
 		{
-		//idi na taj cvor i ponovi sve ovo
-		toSend.command = "ZERO";
-		toSend
-		}*/
+			//EXPANDING SHIT!
+
+			
+			//svim postojecim dati da prosire id-jeve 0
+			addZeroToMyID();
+			addZeroToID(*buddy);
+
+			//kreirati novi sa id-jem 1xxxx;
+			Node newNode;
+			newNode.address = buddy->addressToContact;
+			newNode.id = createID(0,'1');
+			neighbours.push_back(newNode);
+
+		}
+		else
+		{
+			toSend.command = "NOFREE";
+			toSend.layer = buddy->layer--;
+			toSend.addressToGoTo = myZero.address;
+			toSend.addressOfOrigin = i_sock;
+			toSend.addressToContact = buddy->addressToContact;
+
+			SendMyThing(toSend);
+		}
 	}
 }
 void ServerThing(void* argv)
 {
 	SOCKADDR_IN* buddySocket = (SOCKADDR_IN*)argv;
-	MyPacket buddy;
+	MyPacket* buddy = new MyPacket();
 	Recive((char*)&buddy, sizeof(MyPacket));	
-	if (buddy.command.compare("ZERO"))
+	MyPacket* toSend;
+	if (buddy->command.compare("ZERO"))
 	{
 		//vrati buddyu koga da kontaktira
 		if (!first)
 		{
-			_beginthread(SendZero, NULL, (void*)buddySocket);
+			
+			toSend->addressToGoTo = *buddySocket;
+			toSend->addressToContact = myZero.address;
+			toSend->addressOfOrigin = i_sock;
+			toSend->command = "MYZERO";
+			toSend->id = myZero.id;
+			
+			SendMyThing(*toSend);		
 
 		}
 		else
 		{
-
-			_beginthread(whereToGo, NULL, (void*)buddySocket);
+			whereToGoFromZero(buddy);
+			//_beginthread(whereToGo, NULL, (void*)buddySocket);
 		}
 	}
-	if (buddy.command.compare("MYZERO"))
+	if (buddy->command.compare("MYZERO"))
 	{
-		myZero.id = buddy.id;
-		myZero.address = buddy.addressToGoTo;
-		
-		_beginthread(contactZero, NULL, NULL);
-		delete(buddySocket);
+
+		myZero.id = buddy->id;
+		myZero.address = buddy->addressToGoTo;
+
+		toSend->addressToGoTo = myZero.address;
+		toSend->addressOfOrigin = i_sock;
+		toSend->addressToContact = *buddySocket;
+		toSend->command = "ZERO";
+
+		SendMyThing(*toSend);
+
 	}
-	//EndSocket(buddySocket->socket);
+	if (buddy->command.compare("ADDZEROTOID"))
+	{
+		addZeroToID(*buddy);
+		//_beginthread(addZeroToID, NULL, (void*)buddySocket);
+	}
+	if (buddy->command.compare("FREE?"))
+	{
+		FindFree(buddy);
+		//_beginthread(FindFree, NULL, (void*)buddy);
+	}
+	if (buddy->command.compare("NOFREE"))
+	{
+		_beginthread(NoFree, NULL, (void*)buddy);
+	}
+
+	delete(toSend);
+	delete(buddy);
 }
 int main()
 {
