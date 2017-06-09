@@ -120,29 +120,29 @@ void BSConnect(char *IP, int Port)
 	{
 		printf("Cannot connect\n");
 	}
-	BSPacket mp;
-	Recive((char*)&mp, sizeof(BSPacket),BSsock);
+	BSPacket *mp = new BSPacket();
+	Recive((char*)mp, sizeof(BSPacket),BSsock);
 
 	//dal je goto ili first
-	if (mp.command.compare("GOTO") == 0)
+	if (mp->command.compare("GOTO") == 0)
 	{
 
 		i_sock.sin_family = AF_INET;
 		i_sock.sin_addr.s_addr = htonl(INADDR_ANY);
-		i_sock.sin_port = htons(mp.me.sin_port);
+		i_sock.sin_port = htons(mp->me.sin_port);
 		printf("My port is: %d\n", i_sock.sin_port);
 		//bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
 		
 		MyPacket toSend;
 
 		toSend.command = "ZERO";
-		toSend.addressToGoTo = mp.whereTo;
+		toSend.addressToGoTo = mp->whereTo;
 		toSend.addressOfOrigin = i_sock;
 		toSend.addressToContact = i_sock;
 
 		SendMyThing(toSend);
 	}
-	else if(mp.command.compare("FIRST") == 0)
+	else if(mp->command.compare("FIRST") == 0)
 	{
 		first = true;
 		id = "0";
@@ -150,7 +150,7 @@ void BSConnect(char *IP, int Port)
 		
 		i_sock.sin_family = AF_INET;
 		i_sock.sin_addr.s_addr = htonl(INADDR_ANY);
-		i_sock.sin_port = htons(mp.me.sin_port);
+		i_sock.sin_port = htons(mp->me.sin_port);
 		me.address = i_sock;
 
 
@@ -163,8 +163,8 @@ void BSConnect(char *IP, int Port)
 		int((mp.address.sin_addr.s_addr & 0xFF0000) >> 16),
 		int((mp.address.sin_addr.s_addr & 0xFF000000) >> 24), mp.address.sin_port);
 	printf("Succefully connected");*/
-	//delete(&mp);
-
+	
+	delete(mp);
 	EndSocket(BSsock);
 	printf("ENDING CONNECTION WITH SERVER");
 }
