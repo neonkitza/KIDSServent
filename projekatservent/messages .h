@@ -2,12 +2,14 @@
 #include <windows.h>
 #pragma once
 
+
 struct BSPacket
 {
 	std::string command;
 	SOCKADDR_IN whereTo;
 	SOCKADDR_IN me;
 };
+
 
 typedef struct
 {

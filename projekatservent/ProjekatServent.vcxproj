@@ -147,12 +147,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Algorithm.cpp" />
-    <ClCompile Include="Node.cpp" />
-    <ClCompile Include="strv.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="messages .h" />
-    <ClInclude Include="Node.h" />
     <ClInclude Include="util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

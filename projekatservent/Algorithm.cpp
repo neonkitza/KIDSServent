@@ -11,9 +11,14 @@
 
 #pragma comment(lib,"ws2_32.lib")
 
+
+void addZeroToID(MyPacket);
+void SendMyThing(MyPacket);
+
+
 SOCKET sock; // this is the server socket
 SOCKADDR_IN i_sock; // this will containt some informations about our server socket
-WSADATA Data; // this is to save our socket version
+WSADATA ServData; // this is to save our socket version
 std::vector<Node> neighbours;
 int nrNeighbours = 0;
 int nrKids = 0;
@@ -31,19 +36,20 @@ int Send(SOCKET sockToSend,char *Buf, int len)
 	slen = send(sockToSend, Buf, len, 0);
 	if (slen < 0)
 	{
-		printf("cannot send data");
+		printf("cannot send data\n");
 		return 1;
 	}
 	return slen;
 }
 
-int Recive(char *Buf, int len)
+int Recive(char *Buf, int len,SOCKET sock)
 {
 	int slen;
 	slen = recv(sock, Buf, len, 0);
+	int err = WSAGetLastError();
 	if (slen < 0)
 	{
-		printf("cannot recive data");
+		printf("cannot recive data\n");
 		return 1;
 	}
 	return slen;
@@ -93,75 +99,81 @@ void GOTOfunc(void* argv)
 	toSend.addressToContact = i_sock;
 
 	SendMyThing(toSend);
-	delete(whereTo);
+	//delete(whereTo);
 }
 
-int BSConnect(char *IP, int Port)
+void BSConnect(char *IP, int Port)
 {
+	WSADATA Data;
 	WSAStartup(MAKEWORD(2, 2), &Data);
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock == INVALID_SOCKET)
+	SOCKET BSsock = socket(AF_INET, SOCK_STREAM, 0);
+	if (BSsock == INVALID_SOCKET)
 	{
 
-		return 1;
+		printf("ERROR\n");
 	}
 	i_sock.sin_family = AF_INET;
 	i_sock.sin_addr.s_addr = inet_addr(IP);
 	i_sock.sin_port = htons(Port);
-	int ss = connect(sock, (struct sockaddr *)&i_sock, sizeof(i_sock));
+	int ss = connect(BSsock, (struct sockaddr *)&i_sock, sizeof(i_sock));
 	if (ss != 0)
 	{
-		printf("Cannot connect");
-		return 0;
+		printf("Cannot connect\n");
 	}
 	BSPacket mp;
-	Recive((char*)&mp, sizeof(BSPacket));
+	Recive((char*)&mp, sizeof(BSPacket),BSsock);
 
 	//dal je goto ili first
-	if (mp.command.compare("GOTO"))
+	if (mp.command.compare("GOTO") == 0)
 	{
-		SOCKADDR_IN* whereTo = new SOCKADDR_IN();
-		whereTo = &mp.whereTo;
-
 
 		i_sock.sin_family = AF_INET;
 		i_sock.sin_addr.s_addr = htonl(INADDR_ANY);
 		i_sock.sin_port = htons(mp.me.sin_port);
+		printf("My port is: %d\n", i_sock.sin_port);
 		//bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
 		
+		MyPacket toSend;
 
-		_beginthread(GOTOfunc, NULL, (void*)whereTo);
+		toSend.command = "ZERO";
+		toSend.addressToGoTo = mp.whereTo;
+		toSend.addressOfOrigin = i_sock;
+		toSend.addressToContact = i_sock;
+
+		SendMyThing(toSend);
 	}
-	else if(mp.command.compare("YOUAREZERO"))
+	else if(mp.command.compare("FIRST") == 0)
 	{
 		first = true;
 		id = "0";
 		me.id = id;
-
+		
 		i_sock.sin_family = AF_INET;
 		i_sock.sin_addr.s_addr = htonl(INADDR_ANY);
 		i_sock.sin_port = htons(mp.me.sin_port);
-
-
 		me.address = i_sock;
 
 
+
 	}
+
 	/*
 	printf("I should connect to (IP: %d.%d.%d.%d - PORT: %d)\n", int(mp.address.sin_addr.s_addr & 0xFF),
 		int((mp.address.sin_addr.s_addr & 0xFF00) >> 8),
 		int((mp.address.sin_addr.s_addr & 0xFF0000) >> 16),
 		int((mp.address.sin_addr.s_addr & 0xFF000000) >> 24), mp.address.sin_port);
 	printf("Succefully connected");*/
-	EndSocket(sock);
-	return 1;
+	//delete(&mp);
+
+	EndSocket(BSsock);
+	printf("ENDING CONNECTION WITH SERVER");
 }
 
 void SendMyThing(MyPacket toSend)
 {
 	SOCKET buddySock = ConnectToServent(&toSend.addressToGoTo);
 	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
-	EndSocket(buddySock);
+	//EndSocket(buddySock);
 	//delete(mp); //mozda ne ovde
 }
 
@@ -229,6 +241,11 @@ int findNeighbourWithMaxId(int layer)
 	return temp;
 }
 
+void addZeroToMyID()
+{
+	id = "0" + id;
+}
+
 void addZeroToID(MyPacket buddy)
 {
 	MyPacket toSend;
@@ -241,10 +258,7 @@ void addZeroToID(MyPacket buddy)
 
 	broadcastMSG(toSend);
 }
-void addZeroToMyID()
-{
-	id = "0" + id;
-}
+
 
 
 void goBack(void* argv)
@@ -419,8 +433,8 @@ void ServerThing(void* argv)
 {
 	SOCKADDR_IN* buddySocket = (SOCKADDR_IN*)argv;
 	MyPacket* buddy = new MyPacket();
-	Recive((char*)&buddy, sizeof(MyPacket));	
-	MyPacket* toSend;
+	Recive((char*)&buddy, sizeof(MyPacket),sock);	
+	MyPacket* toSend = new MyPacket();
 	if (buddy->command.compare("ZERO"))
 	{
 		//vrati buddyu koga da kontaktira
@@ -471,30 +485,30 @@ void ServerThing(void* argv)
 		_beginthread(NoFree, NULL, (void*)buddy);
 	}
 
-	delete(toSend);
-	delete(buddy);
+	//delete(toSend);
+	//delete(buddy);
 }
 int main()
 {
 	//bootstrap
 	BSConnect("127.0.0.1", 9999);
-	//zatvori
-	//EndSocket(s);
-	/*WSAStartup(MAKEWORD(2, 2), &Data);
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (sock == INVALID_SOCKET)
-	{
+	//EndSocket(ss);
 
-		return 1;
-	}
-	*/
+	WSADATA Data;
+	WSAStartup(MAKEWORD(2, 2), &ServData);
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	printf("Made my listening socket...");
+
 	if (sock == INVALID_SOCKET)
 	{
+		printf("Could not create socket! Error: %d", WSAGetLastError());
+		system("PAUSE");
 		return 1;
 	}
 
 	bind(sock, (LPSOCKADDR)&i_sock, sizeof(i_sock));
 	listen(sock, 100);
+	printf("LISTENING TO SOCKET...");
 	while (1)
 	{
 		SOCKET myBuddy;
