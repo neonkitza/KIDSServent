@@ -1,4 +1,4 @@
-#include <windows.h>
+/*#include <windows.h>
 #include <stdio.h> 
 #include <string>
 #include <thread>
@@ -89,6 +89,7 @@ SOCKET ConnectToServent(SOCKADDR_IN adr)
 	return sockOUT;
 }
 
+
 void BSConnect(char *IP, int Port)
 {
 	WSADATA Data;
@@ -168,7 +169,7 @@ void SendMyThing(MyPacket toSend)
 
 bool amIFree()
 {
-	if (nrKids == 2) return false;
+	if (nrKids == 2) return true;
 	int k = 0;
 	for (int i = 0; i < neighbours.size(); i++)
 	{
@@ -178,10 +179,8 @@ bool amIFree()
 			nrKids++;
 		}
 		if (k == 2)
-		{
 			nrKids = 2;
-			return false;
-		}
+		return false;
 	}
 	return true;
 }
@@ -194,7 +193,7 @@ void createID(int layer, char whichOne, char* newID)
 void broadcastMSG(MyPacket toSend)
 {
 	//int layer = toSend.layer;
-	for (int l = layer; l < 20; l++)
+	for (int l = toSend.layer; l < 20; l++)
 	{
 		for (int i = 0; i < neighbours.size(); i++)
 		{
@@ -271,7 +270,7 @@ void whereToGoFromZero(MyPacket* buddy)
 		createID(toSend.layer, '0' + nrKids, myChild.id);
 		strncpy(toSend.id, myChild.id, 20);
 
-		
+		neighbours.push_back(myChild);
 		kids[nrKids - 1] = myChild;
 
 
@@ -297,7 +296,6 @@ void whereToGoFromZero(MyPacket* buddy)
 				SendMyThing(connectMe);
 			}
 		}
-		neighbours.push_back(myChild);
 
 
 	}
@@ -315,14 +313,9 @@ void whereToGoFromZero(MyPacket* buddy)
 			myChild.address = buddy->addressToContact;
 			toSend.layer = buddy->layer - 1; //valjda 18
 			createID(toSend.layer, '1', myChild.id);
-			strncpy(toSend.id, myChild.id, 20);
 
-			
+			neighbours.push_back(myChild);
 
-			toSend.command = FREE;
-			toSend.addressToGoTo = buddy->addressToContact;
-			toSend.addressOfOrigin = i_sock;
-			SendMyThing(toSend);
 
 			MyPacket connectMe;
 			connectMe.addressOfOrigin = i_sock;
@@ -337,7 +330,6 @@ void whereToGoFromZero(MyPacket* buddy)
 					SendMyThing(connectMe);
 				}
 			}
-			neighbours.push_back(myChild);
 
 		}
 		else
@@ -346,7 +338,7 @@ void whereToGoFromZero(MyPacket* buddy)
 			toSend.addressToGoTo = neighbours[neighbourIndex].address;
 			toSend.addressToContact = buddy->addressToContact;
 			toSend.addressOfOrigin = i_sock;
-			toSend.layer = tempLayer;
+			toSend.layer = tempLayer + 1; //da li?
 			strncpy(toSend.id, id, 20);
 
 			toSend.command = AREYOUFREE;
@@ -366,104 +358,74 @@ void FindFree(MyPacket* buddy)
 		nrKids++;
 		Node myChild;
 		myChild.address = buddy->addressToContact;
-
-		strncpy(myChild.id, id, 20);
-		createID(toSend.layer+1, '0' + nrKids, myChild.id);
+		//myChild.id = createID(buddy->layer + 1, '0'+nrKids); //TODO: FIX 
 		strncpy(toSend.id, myChild.id, 20);
+		createID(19, '0' + nrKids, myChild.id);
 
-		
+		neighbours.push_back(myChild);
 		kids[nrKids - 1] = myChild;
 
 
 		toSend.command = FREE;
 		toSend.addressToGoTo = buddy->addressToContact;
 		toSend.addressOfOrigin = i_sock;
-		//kontaktirati buddy->addressToContact da nas doda u neighboure
+
+		std::cout << "FoundFree - my ID: ";
+		for (int i = 0; i < strlen(buddy->id); i++) {
+			std::cout << buddy->id[i];
+		}
+		std::cout << std::endl;
+
+		//vrati da smo nasli slobodno mesto
 		SendMyThing(toSend);
 
-		toSend.layer++;
-		//naci sve sa kojima treba da smo spojeni i reci im da nas spoje
-		//to su oni koji su na istom layeru kao novi cvor
+
+		//kontaktirati buddySocket da nas doda u neighboure
+
 		MyPacket connectMe;
 		connectMe.addressOfOrigin = i_sock;
 		for (int i = 0; i < neighbours.size(); i++)
 		{
-			if (id[toSend.layer] != neighbours[i].id[toSend.layer])
+			if (id[toSend.layer + 1] != neighbours[i].id[toSend.layer + 1])
 			{
 				connectMe.addressToGoTo = neighbours[i].address;
 				connectMe.command = CONNECTME;
 				strncpy(connectMe.id, myChild.id, 20);
+				connectMe.layer = toSend.layer + 1;
 				//posalji
 				SendMyThing(connectMe);
 			}
 		}
-		neighbours.push_back(myChild);
 
 	}
 	else
 	{
 		int neighbourIndex = findNeighbourWithMaxId(toSend.layer);
-		if (neighbourIndex == -1)
+		if (buddy->layer == 19 || neighbourIndex == -1)
 		{
-
-			//NIJE DOBRO!!!!
-
-			
 			//vracaj nazad
-			if (id[toSend.layer] == '2')
-			{
-				toSend.layer = buddy->layer;
-				toSend.addressToGoTo = buddy->addressOfOrigin;
-				toSend.addressToContact = buddy->addressToContact;
-				toSend.addressOfOrigin = i_sock;
-				strncpy(toSend.id, id, 20);
-				toSend.command = NOFREE;
+			toSend.layer = buddy->layer - 1;
+			toSend.addressToGoTo = buddy->addressOfOrigin;
+			toSend.addressToContact = buddy->addressToContact;
+			toSend.addressOfOrigin = i_sock;
+			//toSend.id = id;
+			strncpy(toSend.id, id, 20);
+			toSend.command = NOFREE;
 
-				SendMyThing(toSend);
-			}
-			else
-			{
-				//pravi se dvojka
+			SendMyThing(toSend);
 
-				Node myChild;
-				myChild.address = buddy->addressToContact;
-				//toSend.layer = buddy->layer; //valjda
-				createID(toSend.layer, '2', myChild.id);
-				strncpy(toSend.id, myChild.id, 20);
-
-				
-
-				toSend.command = FREE;
-				toSend.addressToGoTo = buddy->addressToContact;
-				toSend.addressOfOrigin = i_sock;
-				SendMyThing(toSend);
-
-				MyPacket connectMe;
-				connectMe.addressOfOrigin = i_sock;
-				for (int i = 0; i < neighbours.size(); i++)
-				{
-					if (id[toSend.layer] != neighbours[i].id[toSend.layer])
-					{
-						connectMe.addressToGoTo = myChild.address;
-						connectMe.command = CONNECTME;
-						strncpy(connectMe.id, myChild.id, 20);
-						//posalji
-						SendMyThing(connectMe);
-					}
-				}
-				neighbours.push_back(myChild);
-
-			}
+			//_beginthread(goBack, NULL, (void*)toSend);
 
 		}
 		else
 		{
-			//toSend.layer++;
+
 			toSend.addressToGoTo = neighbours[neighbourIndex].address;
 			toSend.addressToContact = buddy->addressToContact;
 			toSend.addressOfOrigin = i_sock;
+			toSend.layer++;
+			//toSend.id = id;
 			strncpy(toSend.id, id, 20);
-
 			toSend.command = AREYOUFREE;
 
 			SendMyThing(toSend);
@@ -484,7 +446,6 @@ void FoundFree(MyPacket* buddy)
 	newNode.address = buddy->addressOfOrigin;
 	strncpy(newNode.id, buddy->id, 20);
 
-	printf("FOUND FREE!!!!\n");
 	printID(id);
 }
 void ConnectMe(MyPacket* buddy)
@@ -493,19 +454,15 @@ void ConnectMe(MyPacket* buddy)
 	myBuddy.address = buddy->addressOfOrigin;
 	strncpy(myBuddy.id, buddy->id, 20);
 	neighbours.push_back(myBuddy);
-
-
-	std::cout << "Connected buddy id: " << myBuddy.id << " and port: " << myBuddy.address.sin_port << std::endl;
-	printID(myBuddy.id);
 }
-
-void NoFree(MyPacket* buddy)
+void NoFree(void* argv)
 {
+	MyPacket* buddy = (MyPacket*)argv;
 	MyPacket toSend;
 	if (buddy->id[buddy->layer] == '1')
 	{
 		//iz trenutnog cvora napravimo dvojku ovog layera
-
+		
 		toSend.command = FREE;
 		toSend.addressToGoTo = buddy->addressToContact;
 		toSend.addressOfOrigin = i_sock;
@@ -518,11 +475,11 @@ void NoFree(MyPacket* buddy)
 		strncpy(toSend.id, id, 20);
 		createID(buddy->layer, '2', toSend.id);
 		strncpy(newNode.id, toSend.id, 20);
-		
+		neighbours.push_back(newNode);
 
 		SendMyThing(toSend);
 		//TODO: povezemo sa svima sa kojima treba
-
+		
 		MyPacket connectMe;
 		connectMe.addressOfOrigin = i_sock;
 
@@ -539,7 +496,6 @@ void NoFree(MyPacket* buddy)
 				SendMyThing(connectMe);
 			}
 		}
-		neighbours.push_back(newNode);
 
 
 
@@ -571,9 +527,12 @@ void NoFree(MyPacket* buddy)
 			toSend.command = FREE;
 
 
-			//SendMyThing(toSend);
+			SendMyThing(toSend);
 
 			neighbours.push_back(newNode);
+
+
+
 		}
 		SendMyThing(toSend);
 	}
@@ -602,10 +561,13 @@ void ServerThing(void* argv)
 		else
 		{
 			whereToGoFromZero(buddy);
+			//_beginthread(whereToGo, NULL, (void*)buddySocket);
 		}
 	}
 	else if (buddy->command == MYZERO)
 	{
+
+		//strncpy(toSend->id, buddy->id, 20);
 		strncpy(myZero.id, buddy->id, 20);
 		myZero.address = buddy->addressToContact;
 
@@ -626,11 +588,12 @@ void ServerThing(void* argv)
 	}
 	else if (buddy->command == NOFREE)
 	{
-		NoFree(buddy);
+		_beginthread(NoFree, NULL, (void*)buddy);
 	}
 	else if (buddy->command == FREE)
 	{
 		FoundFree(buddy);
+		//_beginthread(FindFree, NULL, (void*)buddy);
 	}
 	else if (buddy->command == CONNECTME)
 	{
@@ -643,6 +606,7 @@ int main()
 {
 	//bootstrap
 	BSConnect("127.0.0.1", 9999);
+	//EndSocket(ss);
 
 	WSADATA Data;
 	WSAStartup(MAKEWORD(2, 2), &ServData);
@@ -675,4 +639,4 @@ int main()
 	EndSocket(sock);
 
 	return 0;
-}
+}*/

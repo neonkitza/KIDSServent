@@ -39,3 +39,12 @@ bool StartsWith(const std::string& text, const std::string& token)
 		return false;
 	return (text.compare(0, token.length(), token) == 0);
 }
+
+void printID(char id[])
+{
+	std::cout << "my ID: ";
+	for (int i = 0; i < 20; i++) {
+		std::cout << id[i];
+	}
+	std::cout << std::endl;
+}

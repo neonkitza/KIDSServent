@@ -5,7 +5,7 @@
 
 struct BSPacket
 {
-	std::string command;
+	int command;
 	SOCKADDR_IN whereTo;
 	SOCKADDR_IN me;
 };
@@ -13,7 +13,7 @@ struct BSPacket
 
 typedef struct
 {
-	std::string id;
+	char id[20];
 	SOCKADDR_IN address;
 	//SOCKET socket;
 
@@ -21,11 +21,17 @@ typedef struct
 
 struct MyPacket
 {
-	std::string command;
-	std::string id;
+	int command;
+	char id[20];
 	int layer;
 	SOCKADDR_IN addressToGoTo; //who to send MyPacket to
 	SOCKADDR_IN addressToContact; //who should we contact once we recieve the packet
 	SOCKADDR_IN addressOfOrigin; //who sent it
 
+};
+
+struct socketStruct
+{
+	SOCKADDR_IN address;
+	SOCKET socket;
 };
