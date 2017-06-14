@@ -9,16 +9,25 @@
 #include "commands.h"
 #include "util.h"
 #include "messages .h"
+#include <time.h>
 
 #pragma comment(lib,"ws2_32.lib")
 
+//port chaosGame-a = 10000
+#define chaosPort 10000
+
+void startChaos(void* argv);
+void drawImg(cv::Mat &img);
+
+using namespace std;
 
 void addZeroToID(MyPacket);
 void SendMyThing(MyPacket);
 
-
 SOCKET sock; // this is the server socket
+SOCKET fractalSock;
 SOCKADDR_IN i_sock; // this will containt some informations about our server socket
+SOCKADDR_IN i_sock_Fractal;
 WSADATA ServData; // this is to save our socket version
 std::vector<Node> neighbours;
 int nrNeighbours = 0;
@@ -29,7 +38,28 @@ char id[20];
 int layer;
 //socketStruct whoToCall;
 Node myZero;
+int howManyInSystem = 0;
 
+bool draw = false;
+bool working = false;
+bool quitting = false;
+
+int nrOfPoints, width, height;
+double distanceP;
+cv::Mat display_image;
+//vector<POINT> startingPoints;
+
+
+void beginChaos(void* argv);
+
+void printID(char id[])
+{
+	std::cout << "my ID: ";
+	for (int i = 0; i < 20; i++) {
+		std::cout << id[i];
+	}
+	std::cout << std::endl;
+}
 
 int Send(SOCKET sockToSend, char *Buf, int len)
 {
@@ -112,7 +142,8 @@ void BSConnect(char *IP, int Port)
 	}
 	BSPacket mp;
 	Recive((char*)&mp, sizeof(BSPacket), BSsock);
-
+	height = mp.height;
+	width = mp.width;
 	//dal je goto ili first
 	if (mp.command == GOTO)
 	{
@@ -139,6 +170,7 @@ void BSConnect(char *IP, int Port)
 	else if (mp.command == YOUAREZERO)
 	{
 		first = true;
+		howManyInSystem = 1;
 		for (int i = 0; i < 20; i++)
 			id[i] = '0';
 		printID(id);
@@ -147,10 +179,6 @@ void BSConnect(char *IP, int Port)
 		i_sock.sin_port = mp.me.sin_port;
 
 		printf("My port is: %d\n", i_sock.sin_port);
-		//me.address = i_sock;
-
-
-
 	}
 	EndSocket(BSsock);
 }
@@ -158,7 +186,7 @@ void BSConnect(char *IP, int Port)
 void SendMyThing(MyPacket toSend)
 {
 	printf("Sending command: %d", toSend.command);
-	std::cout << "to port :" << toSend.addressToGoTo.sin_port << std::endl;
+	std::cout << " to port :" << toSend.addressToGoTo.sin_port << std::endl;
 
 	SOCKET buddySock = ConnectToServent(toSend.addressToGoTo);
 	Send(buddySock, (char*)&toSend, sizeof(MyPacket));
@@ -210,8 +238,6 @@ void broadcastMSG(MyPacket toSend)
 
 }
 
-
-
 int findNeighbourWithMaxId(int& layer)
 {
 	char max[20];
@@ -254,17 +280,25 @@ void sendToNodesUnderMe(MyPacket* buddy, MyPacket toSend)
 		}
 	}
 }
+void addPointStuff(MyPacket& toSend)
+{
+	toSend.r = r100 / 100.0;
+	toSend.nrPoints = point_set.size();
 
+	for (int i = 0; i < nrOfPoints; i++)
+	{
+		toSend.point_set[i] = point_set[i];
+	}
+}
 void whereToGoFromZero(MyPacket* buddy)
 {
-
-	//ovde govori kako je nesto oko myChild-a corrupted
 	MyPacket toSend;
 	toSend.layer = 19;
 	buddy->layer = 19;
 	if (amIFree())
 	{
 		nrKids++;
+		howManyInSystem++;
 		Node myChild;
 		myChild.address = buddy->addressToContact;
 
@@ -274,12 +308,14 @@ void whereToGoFromZero(MyPacket* buddy)
 		
 		kids[nrKids - 1] = myChild;
 
+		addPointStuff(toSend);
 
 		toSend.command = FREE;
 		toSend.addressToGoTo = buddy->addressToContact;
 		toSend.addressOfOrigin = i_sock;
 		//kontaktirati buddy->addressToContact da nas doda u neighboure
 		SendMyThing(toSend);
+
 
 
 		//naci sve sa kojima treba da smo spojeni i reci im da nas spoje
@@ -299,6 +335,17 @@ void whereToGoFromZero(MyPacket* buddy)
 		}
 		neighbours.push_back(myChild);
 
+		if (howManyInSystem == 3)
+		{
+			for (int i = 0; i < nrKids; i++)
+			{
+				connectMe.addressToGoTo = kids[i].address;
+				connectMe.command = STARTCHAOS;
+				//posalji
+				SendMyThing(connectMe);
+			}
+		}
+
 
 	}
 	else
@@ -307,7 +354,6 @@ void whereToGoFromZero(MyPacket* buddy)
 		int neighbourIndex = findNeighbourWithMaxId(tempLayer);
 		if (neighbourIndex == -1)
 		{
-			//OVO BI TREBALO DA SE DESI SAMO DVA PUTA
 
 			//mora da se grana i tu mu je mesto
 
@@ -317,7 +363,7 @@ void whereToGoFromZero(MyPacket* buddy)
 			createID(toSend.layer, '1', myChild.id);
 			strncpy(toSend.id, myChild.id, 20);
 
-			
+			addPointStuff(toSend);
 
 			toSend.command = FREE;
 			toSend.addressToGoTo = buddy->addressToContact;
@@ -374,6 +420,7 @@ void FindFree(MyPacket* buddy)
 		
 		kids[nrKids - 1] = myChild;
 
+		addPointStuff(toSend);
 
 		toSend.command = FREE;
 		toSend.addressToGoTo = buddy->addressToContact;
@@ -406,7 +453,7 @@ void FindFree(MyPacket* buddy)
 		if (neighbourIndex == -1)
 		{
 
-			//NIJE DOBRO!!!!
+			
 
 			
 			//vracaj nazad
@@ -432,6 +479,7 @@ void FindFree(MyPacket* buddy)
 				strncpy(toSend.id, myChild.id, 20);
 
 				
+				addPointStuff(toSend);
 
 				toSend.command = FREE;
 				toSend.addressToGoTo = buddy->addressToContact;
@@ -475,17 +523,34 @@ void FindFree(MyPacket* buddy)
 }
 void FoundFree(MyPacket* buddy)
 {
+	printf("FOUND FREE!!!!\n");
+
 	myZero.address = buddy->addressOfOrigin;
 	strncpy(id, buddy->id, 20);
 	strncpy(myZero.id, buddy->id, 20);
 	myZero.id[buddy->layer] = '0';
 
+	std::cout << "My zero's id: ";
+	printID(myZero.id);
+
 	Node newNode;
 	newNode.address = buddy->addressOfOrigin;
 	strncpy(newNode.id, buddy->id, 20);
 
-	printf("FOUND FREE!!!!\n");
+	std::cout << "My id: ";
 	printID(id);
+
+	//izvuci iz buddy-a chaos stuff
+	
+	r100 = buddy->r * 100;
+	nrOfPoints = buddy->nrPoints;
+
+	point_set.clear();
+	for (int i = 0; i < nrOfPoints; i++)
+	{
+		point_set.push_back(buddy->point_set[i]);
+	}
+	
 }
 void ConnectMe(MyPacket* buddy)
 {
@@ -505,11 +570,14 @@ void NoFree(MyPacket* buddy)
 	if (buddy->id[buddy->layer] == '1')
 	{
 		//iz trenutnog cvora napravimo dvojku ovog layera
-
+		addPointStuff(toSend);
 		toSend.command = FREE;
 		toSend.addressToGoTo = buddy->addressToContact;
 		toSend.addressOfOrigin = i_sock;
 		toSend.layer = buddy->layer;
+
+
+
 		//kreiramo dvojku na layeru ovog cvora
 		//dodamo ga kao neighbour-a
 		Node newNode;
@@ -568,6 +636,7 @@ void NoFree(MyPacket* buddy)
 			createID(buddy->layer - 1, '1', toSend.id);
 			strncpy(newNode.id, toSend.id, 20);
 			//newNode.id[buddy->layer-1] = '1'; //FIX
+			addPointStuff(toSend);
 			toSend.command = FREE;
 
 
@@ -578,6 +647,80 @@ void NoFree(MyPacket* buddy)
 		SendMyThing(toSend);
 	}
 }
+void recvImg(cv::Mat& img, SOCKET socket)
+{
+	int  imgSize = img.total()*img.elemSize();
+
+	uchar* sockData = (uchar *)malloc(sizeof(int) * imgSize);
+	//uchar sockData[imgSize];
+
+	//Receive data here
+	int bytes = 0;
+	for (int i = 0; i < imgSize; i += bytes) {
+		if ((bytes = recv(socket, (char*)sockData + i, imgSize - i, 0)) == -1) {
+			printf("recv POINTS failed\n");
+		}
+	}
+
+	// Assign pixel value to img
+
+	int ptr = 0;
+	for (int i = 0; i < img.rows; i++) {
+		for (int j = 0; j < img.cols; j++) {
+			img.at<cv::Vec3b>(i, j) = cv::Vec3b(sockData[ptr + 0], sockData[ptr + 1], sockData[ptr + 2]);
+			ptr = ptr + 3;
+		}
+	}
+
+	delete(sockData);
+}
+
+void switchWithBuddy(MyPacket* buddy,SOCKET socket)
+{
+	MyPacket toSend;
+	toSend.command = STOPCHAOS;
+	cv::Mat  img = cv::Mat::zeros(height, width, CV_8UC3);
+	recvImg(img, socket);
+
+	if (buddy->id[19] == '0')
+	{
+		first = true;
+		//onda nas menja
+		//nula salje QUITTING najvecem detetu
+		strncpy(id, buddy->id, 20);
+		i_sock = buddy->addressOfOrigin;
+		if (id[19] == '1')
+		{
+			nrKids = 0;
+		}
+		else
+		{
+			nrKids = 1;
+		}
+		toSend.addressToGoTo = buddy->addressToContact;
+		//pokrenuti prozor/chaos
+		_beginthread(startChaos, NULL, NULL);
+	}
+	else 
+	{
+		nrKids--;
+		if (buddy->id[19] == '1')
+		{
+			toSend.addressToGoTo = kids[1].address;
+			strncpy(toSend.id, id, 20);
+			createID(19, '1', toSend.id);
+
+			kids[0] = kids[1];
+		}
+		else
+		{
+			toSend.addressToGoTo = kids[0].address;
+			
+		}
+		SendMyThing(toSend);
+	}
+}
+
 void ServerThing(void* argv)
 {
 	socketStruct* buddySocket = (socketStruct*)argv;
@@ -589,7 +732,6 @@ void ServerThing(void* argv)
 		//vrati buddyu koga da kontaktira
 		if (!first)
 		{
-
 			toSend->addressToGoTo = buddy->addressOfOrigin;
 			toSend->addressToContact = myZero.address;
 			toSend->addressOfOrigin = i_sock;
@@ -636,13 +778,131 @@ void ServerThing(void* argv)
 	{
 		ConnectMe(buddy);
 	}
+	else if (buddy->command == STARTCHAOS)
+	{
+		_beginthread(beginChaos, NULL, NULL);
+	}
+	else if (buddy->command == QUITTING)
+	{
+		//treba da nas zameni buddy
+		switchWithBuddy(buddy,buddySocket->socket);
+	}
+	else if (buddy->command == POINTS)
+	{
+		cv::Mat  img = cv::Mat::zeros(height, width, CV_8UC3);
+		
+		recvImg(img, buddySocket->socket);
+
+		drawImg(img);
+	}
+	else if (buddy->command == STOPCHAOS)
+	{
+		working = false;
+		draw = false;
+	}
 	//delete(toSend);
 	//delete(buddy);
 }
+void sendImg(MyPacket toSend)
+{
+	SOCKET imgSock = ConnectToServent(toSend.addressToGoTo);
+	display_image = display_image.reshape(0, 1);
+	int  imgSize = display_image.total()*display_image.elemSize();
+
+	int bytes = send(imgSock, (char*)display_image.data, imgSize, 0);
+
+	EndSocket(imgSock);
+}
+void sendImgToDraw()
+{
+	MyPacket toSend;
+	toSend.command = POINTS;
+	toSend.addressOfOrigin = i_sock;
+	strncpy(toSend.id, id, 20);
+	toSend.addressToGoTo = myZero.address;
+
+	SendMyThing(toSend);
+	
+	sendImg(toSend);
+
+}
+void waitForQuit(void* argv)
+{
+
+	std::cout << "Q to quit";
+	std::string s = " ";
+	while(s[0]!='q')
+		std::cin >> s;
+	if (s[0] == 'q' || s[0] == 'Q')
+	{
+		quitting = true;
+		working = false;
+		MyPacket toSend;
+		toSend.command = QUITTING;
+		toSend.addressOfOrigin = i_sock;
+		strncpy(toSend.id, id, 20);
+
+		if (id[19] == '0')
+		{
+			int neighbourIndex = findNeighbourWithMaxId(toSend.layer);
+			if (neighbourIndex == -1)
+			{
+				if (nrKids != 0)
+				{
+					toSend.addressToGoTo = kids[nrKids - 1].address;
+					toSend.addressToContact = kids[0].address;
+
+					SendMyThing(toSend);
+
+					//saljemo bajtove slike
+					sendImg(toSend);
+
+				}
+				else return; //GG
+			}
+			else
+			{
+				//treba da posalje tom neighbouru da nadje onog sa najvecim id-em da zameni nulu
+
+				//ali posto min spec = 3 cvora, ovo nije preterano bitno :p
+			}
+		}
+		else
+		{
+			//poslati nuli da quitujemo i ono sto smo sracunali do sada
+			toSend.addressToGoTo = myZero.address;
+			SendMyThing(toSend);
+
+			sendImg(toSend);
+		}
+
+	}
+
+	//poslati na cvor sa najvecim id-em da treba da nas zameni
+	
+
+}
+
 int main()
 {
 	//bootstrap
 	BSConnect("127.0.0.1", 9999);
+
+	display_image = cv::Mat(width, height, CV_8UC3, cv::Scalar(0, 0, 0));
+	if (first)
+	{
+		draw = true;
+		_beginthread(startChaos, NULL, NULL);
+		
+	}
+	else
+	{
+		cv::Mat display_image(width, height, CV_8UC3, cv::Scalar(0, 0, 0));
+
+	}
+
+	_beginthread(waitForQuit, NULL, NULL);
+	
 
 	WSADATA Data;
 	WSAStartup(MAKEWORD(2, 2), &ServData);
@@ -661,14 +921,21 @@ int main()
 	printf("LISTENING TO PORT: %d\n", i_sock.sin_port);
 	while (1)
 	{
+		if(quitting) break;
 		SOCKET myBuddy;
 		SOCKADDR_IN i_sock2;
 		int so2len = sizeof(i_sock2);
 		myBuddy = accept(sock, (sockaddr *)&i_sock2, &so2len);
-		socketStruct* ss = new socketStruct();
-		ss->address = i_sock2;
-		ss->socket = myBuddy;
-		_beginthread(ServerThing, NULL, (void*)ss);
+		if (myBuddy != -1)
+		{
+			socketStruct* ss = new socketStruct();
+			ss->address = i_sock2;
+			ss->socket = myBuddy;
+			if (ss->address.sin_port != 9999) 
+			{
+				_beginthread(ServerThing, NULL, (void*)ss);
+			}
+		}
 
 	}
 

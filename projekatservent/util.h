@@ -1,50 +1,17 @@
 #include <string>
+#include <vector>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #pragma once
+extern int width, height;
+extern bool draw;
+extern bool working;
+extern int r100;
+extern std::vector<cv::Point> point_set;
+extern cv::Mat display_image;
+extern bool first;
 
-bool hasEnding(std::string const &fullString, std::string const &ending) {
-	if (fullString.length() >= ending.length()) {
-		return (0 == fullString.compare(fullString.length() - ending.length(), ending.length(), ending));
-	}
-	else {
-		return false;
-	}
-}
-std::string getIthDigitFromEnd(std::string text, int i)
-{
-	return text.substr(text.length() - i, text.length() - i + 1);
-}
 
-std::string getLastIDigits(std::string text, int i)
-{
-	return text.substr(text.length() - i);
-}
 
-std::string getStartID(std::string text)
-{
-	return text.substr(0, 1);
-}
-
-std::string getIStartingID(std::string text, int i)
-{
-	return text.substr(0, i);
-}
-std::string getEndID(std::string text)
-{
-	return text.substr(text.length() - 1);
-}
-bool StartsWith(const std::string& text, const std::string& token)
-{
-	if (text.length() < token.length())
-		return false;
-	return (text.compare(0, token.length(), token) == 0);
-}
-
-void printID(char id[])
-{
-	std::cout << "my ID: ";
-	for (int i = 0; i < 20; i++) {
-		std::cout << id[i];
-	}
-	std::cout << std::endl;
-}
